@@ -1,0 +1,26 @@
+{
+  "name": "fce-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@auth0/auth0-react": "^2.2.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.12.7",
+    "@tanstack/react-query": "^5.51.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "tailwindcss": "^3.4.9",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.41"
+  }
+}
+
