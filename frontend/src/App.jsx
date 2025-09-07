@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthProvider, useToken } from './lib/auth'
 import { fetchJSON } from './lib/api'
@@ -21,44 +21,94 @@ function Dashboard() {
     }
   })
 
+  // Auto-align: fetch latest and set end/start to [latest - 90d, latest]
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken()
+        const latest = await fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`, token)
+        if (latest?.date) {
+          const endDate = new Date(latest.date)
+          const startDate = new Date(endDate)
+          startDate.setDate(startDate.getDate() - 90)
+          const newEnd = endDate.toISOString().slice(0,10)
+          const newStart = startDate.toISOString().slice(0,10)
+          if (newEnd !== end || newStart !== start) {
+            setEnd(newEnd)
+            setStart(newStart)
+          }
+        }
+      } catch {}
+    })()
+  // only on mount or when site changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site])
+
   const { loginWithRedirect, logout, isAuthenticated } = useAuth0()
 
   return (
-    <div style={{ maxWidth: 1000, margin: '20px auto', fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <header style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <h1>Salmon FCE Demo</h1>
-        <div>
+    <div className="max-w-7xl mx-auto px-3 sm:px-5 py-6">
+      <header className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold">Salmon FCE Demo</h1>
+        <div className="space-x-2">
           {isAuthenticated ? (
-            <button onClick={()=>logout({ logoutParams: { returnTo: window.location.origin }})}>Logout</button>
+            <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>logout({ logoutParams: { returnTo: window.location.origin }})}>Logout</button>
           ) : (
-            <button onClick={()=>loginWithRedirect()}>Login</button>
+            <button className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={()=>loginWithRedirect()}>Login</button>
           )}
         </div>
       </header>
 
-      <section style={{ display:'grid', gap:12, gridTemplateColumns:'1fr 1fr 1fr' }}>
-        <label>Start <input type="date" value={start} onChange={e=>setStart(e.target.value)} /></label>
-        <label>End <input type="date" value={end} onChange={e=>setEnd(e.target.value)} /></label>
-        <label>Site <input value={site} onChange={e=>setSite(e.target.value)} /></label>
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <label className="flex flex-col text-sm">Start
+          <input className="mt-1 border rounded p-2" type="date" value={start} onChange={e=>setStart(e.target.value)} />
+        </label>
+        <label className="flex flex-col text-sm">End
+          <input className="mt-1 border rounded p-2" type="date" value={end} onChange={e=>setEnd(e.target.value)} />
+        </label>
+        <label className="flex flex-col text-sm md:col-span-2">Site
+          <input className="mt-1 border rounded p-2" value={site} onChange={e=>setSite(e.target.value)} />
+        </label>
       </section>
 
-      <button onClick={()=>refetch()} style={{ marginTop: 10 }}>Refresh</button>
+      <div className="flex gap-2 mb-6">
+        <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>refetch()}>Refresh</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-30); setStart(s.toISOString().slice(0,10)); }}>Last 30d</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-90); setStart(s.toISOString().slice(0,10)); }}>Last 90d</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); setStart(s.toISOString().slice(0,10)); }}>Last 180d</button>
+      </div>
 
-      {isLoading && <p>Loading…</p>}
-      {error && <p>Error: {String(error)}</p>}
+      {isLoading && <p className="text-sm text-gray-600">Loading…</p>}
+      {error && <p className="text-sm text-red-600">Error: {String(error)}</p>}
 
       {data && data.length>0 && (
         <>
-          <FceChart data={data} />
-          <TempChart data={data} />
-          <table style={{ width: '100%', marginTop: 16 }}>
-            <thead><tr><th>Date</th><th>FCE</th><th>FCR</th><th>Feed (kg)</th><th>Gain (kg)</th></tr></thead>
-            <tbody>
-              {data.slice(-14).map((r)=> (
-                <tr key={r.date}><td>{r.date}</td><td>{r.fce}</td><td>{r.fcr}</td><td>{r.feed_given_kg}</td><td>{r.biomass_gain_kg}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="grid gap-6">
+            <div className="bg-white shadow rounded p-4">
+              <h2 className="font-medium mb-2">Feed Conversion Efficiency (FCE)</h2>
+              <FceChart data={data} />
+            </div>
+            <div className="bg-white shadow rounded p-4">
+              <h2 className="font-medium mb-2">Average Temperature (°C)</h2>
+              <TempChart data={data} />
+            </div>
+          </div>
+
+          <div className="bg-white shadow rounded p-4 mt-6 overflow-x-auto">
+            <h3 className="font-medium mb-2">Last 14 days</h3>
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr><th className="py-2">Date</th><th>FCE</th><th>FCR</th><th>Feed (kg)</th><th>Gain (kg)</th></tr>
+              </thead>
+              <tbody>
+                {data.slice(-14).map((r)=> (
+                  <tr key={r.date} className="border-t">
+                    <td className="py-1.5">{r.date}</td><td>{r.fce}</td><td>{r.fcr}</td><td>{r.feed_given_kg}</td><td>{r.biomass_gain_kg}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

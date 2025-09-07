@@ -21,5 +21,6 @@ async def fetch_daily_mean_temp(lat: float, lon: float, start: date, days: int) 
         data = r.json()
     dates = data.get("daily", {}).get("time", [])
     temps = data.get("daily", {}).get("temperature_2m_mean", [])
-    return {d: float(t) for d, t in zip(dates, temps)}
+    # Some days may have nulls; allow None so downstream merge can proceed
+    return {d: (float(t) if t is not None else None) for d, t in zip(dates, temps)}
 
