@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Iterable, Dict
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import UpdateOne
 
 async def merge_and_upsert(records: Iterable[Dict], temps_by_date: Dict[str, float], mongo_uri: str, db: str, coll: str):
     client = AsyncIOMotorClient(mongo_uri)
@@ -17,9 +18,7 @@ async def merge_and_upsert(records: Iterable[Dict], temps_by_date: Dict[str, flo
     ops = []
     for d in docs:
         filt = {"date": d["date"], "site": d["site"]}
-        ops.append(
-            {"update_one": {"filter": filt, "update": {"$set": d}, "upsert": True}}
-        )
+        ops.append(UpdateOne(filt, {"$set": d}, upsert=True))
     if ops:
         await collection.bulk_write(ops, ordered=False)
 
