@@ -1,0 +1,16 @@
+# general
+.DS_Store
+node_modules/
+*.log
+.env
+.env.*
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# build
+frontend/dist/
+backend/.pytest_cache/
+
