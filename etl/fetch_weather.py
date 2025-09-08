@@ -6,7 +6,10 @@ import httpx
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/era5"
 
 async def fetch_daily_mean_temp(lat: float, lon: float, start: date, days: int) -> Dict[str, float]:
-    end = start + timedelta(days=days - 1)
+    # Clamp end to today to avoid Open-Meteo 400s for future dates
+    requested_end = start + timedelta(days=days - 1)
+    today = date.today()
+    end = requested_end if requested_end <= today else today
     params = {
         "latitude": lat,
         "longitude": lon,
