@@ -1,27 +1,50 @@
 from __future__ import annotations
 import math
 import random
+import hashlib
 from datetime import date, timedelta
 from typing import Iterable, Dict
 
-random.seed(42)
 
-def generate_daily_records(start: date, days: int, site: str = "Marlborough Sounds", seed: int | None = 42) -> Iterable[Dict]:
-    if seed is not None:
-        random.seed(seed)
-    biomass = 10000.0  # kg, starting cohort
+def _rng_for_day(d: date, site: str, seed: int | None) -> random.Random:
+    """Create a deterministic RNG anchored to calendar date and site.
+
+    Using sha256 ensures stability across interpreter runs.
+    """
+    salt = str(seed) if seed is not None else "0"
+    h = hashlib.sha256(f"{site}|{d.isoformat()}|{salt}".encode("utf-8")).digest()
+    # Use first 8 bytes to seed a local RNG
+    return random.Random(int.from_bytes(h[:8], "big", signed=False))
+
+
+def generate_daily_records(
+    start: date,
+    days: int,
+    site: str = "Marlborough Sounds",
+    seed: int | None = 42,
+) -> Iterable[Dict]:
+    """Generate deterministic daily records anchored to calendar dates.
+
+    - Randomness is derived from (site, date, seed)
+    - Seasonality depends on the day-of-year, not the chunk index
+    This makes the generator chunk-safe and idempotent across re-runs.
+    """
+    biomass = 10000.0  # kg, starting cohort (used only for running total)
     for i in range(days):
         d = start + timedelta(days=i)
-        # Regime: reduced feeding between day 120-160
-        regime = "reduced" if 120 <= i <= 160 else "normal"
+        rng = _rng_for_day(d, site, seed)
 
-        # Base feed and gain with some stochasticity
+        # Regime: reduced feeding during a fixed seasonal window (DOY 120-160)
+        yday = d.timetuple().tm_yday
+        regime = "reduced" if 120 <= yday <= 160 else "normal"
+
+        # Base feed and gain with deterministic per-day stochasticity
         base_feed = 500.0 if regime == "normal" else 380.0
-        feed_given = max(0.0, random.gauss(base_feed, base_feed * 0.07))
+        feed_given = max(0.0, rng.gauss(base_feed, base_feed * 0.07))
 
-        # Efficiency varies with a gentle seasonal pattern (proxy for temp influence)
-        seasonal = 0.1 * math.sin(2 * math.pi * (i / 365.0))  # [-0.1, 0.1]
-        efficiency = 0.35 + seasonal  # nominal feed->gain efficiency
+        # Efficiency varies with a gentle seasonal pattern using calendar day
+        seasonal = 0.1 * math.sin(2 * math.pi * (yday / 365.25))  # [-0.1, 0.1]
+        efficiency = 0.35 + seasonal
         efficiency *= (0.9 if regime == "reduced" else 1.0)
         efficiency = max(0.05, min(efficiency, 0.6))
 
@@ -30,7 +53,7 @@ def generate_daily_records(start: date, days: int, site: str = "Marlborough Soun
         fce = 1.0 / fcr if fcr > 0 else 0.0
 
         # Health score heuristic (higher with better efficiency)
-        health_score = max(0.0, min(100.0, 60 + (fce - 0.4) * 200 + random.gauss(0, 5)))
+        health_score = max(0.0, min(100.0, 60 + (fce - 0.4) * 200 + rng.gauss(0, 5)))
 
         biomass += biomass_gain
 
