@@ -18,12 +18,48 @@ function Dashboard() {
   const [site, setSite] = useState('Marlborough Sounds')
   const getToken = useToken()
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['metrics', start, end, site],
+  // Helper to thin data for charts when needed
+  const thin = (arr, maxPoints = 300) => {
+    if (!arr || arr.length <= maxPoints) return arr || []
+    const step = Math.ceil(arr.length / maxPoints)
+    const out = []
+    for (let i = 0; i < arr.length; i += step) out.push(arr[i])
+    return out
+  }
+
+  // Chart data: use aggregated endpoint for large ranges; fallback to daily on 404
+  const { data: chartData, isLoading: isLoadingChart, error: chartError, refetch: refetchChart } = useQuery({
+    queryKey: ['chartData', start, end, site],
     queryFn: async () => {
       const token = await getToken()
+      const startDate = new Date(start)
+      const endDate = new Date(end)
+      const spanDays = Math.max(1, Math.round((endDate - startDate) / 86400000) + 1)
+      try {
+        if (spanDays > 60) {
+          // Request ~200 points for smoothness
+          return await fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=200`, token)
+        }
+      } catch (e) {
+        // If aggregated not available, fall back to daily
+      }
       return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}`, token)
     }
+  })
+
+  // Table data: always last 14 days based on current end date
+  const { data: tableData } = useQuery({
+    queryKey: ['tableData', end, site],
+    queryFn: async () => {
+      const token = await getToken()
+      const endDate = new Date(end)
+      const start14 = new Date(endDate)
+      start14.setDate(start14.getDate() - 13)
+      const s = start14.toISOString().slice(0,10)
+      const e = endDate.toISOString().slice(0,10)
+      return fetchJSON(`/api/metrics?start=${s}&end=${e}&site=${encodeURIComponent(site)}`, token)
+    },
+    enabled: !!end
   })
 
   // Auto-align: fetch latest and set end/start to [min(latest, CLAMP_END) - 90d, min(latest, CLAMP_END)]
@@ -78,25 +114,25 @@ function Dashboard() {
       </section>
 
       <div className="flex gap-2 mb-6">
-        <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>refetch()}>Refresh</button>
+        <button className="px-3 py-1.5 rounded bg-gray-2 00 hover:bg-gray-300" onClick={()=>{ refetchChart() }}>Refresh</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-30); setStart(s.toISOString().slice(0,10)); }}>Last 30d</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-90); setStart(s.toISOString().slice(0,10)); }}>Last 90d</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); setStart(s.toISOString().slice(0,10)); }}>Last 180d</button>
       </div>
 
-      {isLoading && <p className="text-sm text-gray-600">Loading…</p>}
-      {error && <p className="text-sm text-red-600">Error: {String(error)}</p>}
+      {isLoadingChart && <p className="text-sm text-gray-600">Loading…</p>}
+      {chartError && <p className="text-sm text-red-600">Error: {String(chartError)}</p>}
 
-      {data && data.length>0 && (
+      {chartData && chartData.length>0 && (
         <>
           <div className="grid gap-6">
             <div className="bg-white shadow rounded p-4">
               <h2 className="font-medium mb-2">Feed Conversion Efficiency (FCE)</h2>
-              <FceChart data={data} />
+              <FceChart data={thin(chartData)} />
             </div>
             <div className="bg-white shadow rounded p-4">
               <h2 className="font-medium mb-2">Average Temperature (°C)</h2>
-              <TempChart data={data} />
+              <TempChart data={thin(chartData)} />
             </div>
           </div>
 
@@ -107,7 +143,7 @@ function Dashboard() {
                 <tr><th className="py-2">Date</th><th>FCE</th><th>FCR</th><th>Feed (kg)</th><th>Gain (kg)</th></tr>
               </thead>
               <tbody>
-                {data.slice(-14).map((r)=> (
+                {(tableData || []).slice(-14).map((r)=> (
                   <tr key={r.date} className="border-t">
                     <td className="py-1.5">{r.date}</td><td>{r.fce}</td><td>{r.fcr}</td><td>{r.feed_given_kg}</td><td>{r.biomass_gain_kg}</td>
                   </tr>

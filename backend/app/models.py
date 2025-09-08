@@ -20,3 +20,8 @@ class SummaryResponse(BaseModel):
     avg_fcr: float
     avg_fce: float
 
+class AggregatedPoint(BaseModel):
+    date: str
+    fce: float
+    avg_temperature_C: Optional[float] = None
+
