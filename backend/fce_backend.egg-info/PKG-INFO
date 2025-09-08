@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: fce-backend
+Version: 0.1.0
+Summary: FastAPI backend for salmon FCE demo
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.114.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: motor>=3.4.0
+Requires-Dist: pydantic>=2.8.2
+Requires-Dist: structlog>=24.1.0
+Requires-Dist: pytest>=8.2.0
