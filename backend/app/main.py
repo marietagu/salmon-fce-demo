@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional, List
 from math import ceil
-from fastapi import FastAPI, Depends, Query
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .db import get_collection
 from .models import DailyRecord, SummaryResponse, AggregatedPoint
-from .security import verify_jwt
+# Auth removed: all endpoints are public
 
 app = FastAPI(title="FCE Demo API", version="0.1.0")
 
@@ -30,7 +30,6 @@ async def get_metrics(
     end: str = Query(..., description="YYYY-MM-DD"),
     site: str = Query("Marlborough Sounds"),
     limit: int = Query(1000, le=2000),
-    _=Depends(verify_jwt),
 ):
     coll = get_collection()
     q = {"date": {"$gte": start, "$lte": end}, "site": site}
@@ -41,7 +40,7 @@ async def get_metrics(
     return docs
 
 @app.get("/api/metrics/latest", response_model=DailyRecord)
-async def latest(site: str = Query("Marlborough Sounds"), _=Depends(verify_jwt)):
+async def latest(site: str = Query("Marlborough Sounds")):
     coll = get_collection()
     d = await coll.find_one({"site": site}, sort=[("date", -1)])
     d.pop("_id", None)
@@ -52,7 +51,6 @@ async def summary(
     start: str = Query(...),
     end: str = Query(...),
     site: str = Query("Marlborough Sounds"),
-    _=Depends(verify_jwt),
 ):
     coll = get_collection()
     pipeline = [
@@ -83,7 +81,6 @@ async def get_metrics_aggregated(
     end: str = Query(..., description="YYYY-MM-DD"),
     site: str = Query("Marlborough Sounds"),
     points: int = Query(100, ge=10, le=1000, description="Target number of points"),
-    _=Depends(verify_jwt),
 ):
     """Downsample metrics to ~points by bucketing by day/week/month.
     - < 60 days: daily (no change)

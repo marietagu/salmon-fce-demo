@@ -5,10 +5,8 @@ export const API_BASE =
   'https://fce-api.gentlesky-fa6c425e.westeurope.azurecontainerapps.io' ||
   'http://localhost:8000'
 
-export async function fetchJSON(path, token) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
-  })
+export async function fetchJSON(path) {
+  const res = await fetch(`${API_BASE}${path}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }

@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AuthProvider, useToken } from './lib/auth'
 import { fetchJSON } from './lib/api'
 import { FceChart, TempChart } from './components/Charts'
-import { useAuth0 } from '@auth0/auth0-react'
 
 function Dashboard() {
   const CLAMP_END_ISO = '2025-09-07'
@@ -16,7 +14,7 @@ function Dashboard() {
   const [start, setStart] = useState(startDefault.toISOString().slice(0,10))
   const [end, setEnd] = useState(today.toISOString().slice(0,10))
   const [site, setSite] = useState('Marlborough Sounds')
-  const getToken = useToken()
+  // No auth: all API endpoints are public
 
   // Helper to thin data for charts when needed
   const thin = (arr, maxPoints = 300) => {
@@ -31,19 +29,18 @@ function Dashboard() {
   const { data: chartData, isLoading: isLoadingChart, error: chartError, refetch: refetchChart } = useQuery({
     queryKey: ['chartData', start, end, site],
     queryFn: async () => {
-      const token = await getToken()
       const startDate = new Date(start)
       const endDate = new Date(end)
       const spanDays = Math.max(1, Math.round((endDate - startDate) / 86400000) + 1)
       try {
         if (spanDays > 60) {
           // Request ~200 points for smoothness
-          return await fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=200`, token)
+          return await fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=200`)
         }
       } catch (e) {
         // If aggregated not available, fall back to daily
       }
-      return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}`, token)
+      return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}`)
     }
   })
 
@@ -51,13 +48,12 @@ function Dashboard() {
   const { data: tableData } = useQuery({
     queryKey: ['tableData', end, site],
     queryFn: async () => {
-      const token = await getToken()
       const endDate = new Date(end)
       const start14 = new Date(endDate)
       start14.setDate(start14.getDate() - 13)
       const s = start14.toISOString().slice(0,10)
       const e = endDate.toISOString().slice(0,10)
-      return fetchJSON(`/api/metrics?start=${s}&end=${e}&site=${encodeURIComponent(site)}`, token)
+      return fetchJSON(`/api/metrics?start=${s}&end=${e}&site=${encodeURIComponent(site)}`)
     },
     enabled: !!end
   })
@@ -66,8 +62,7 @@ function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const token = await getToken()
-        const latest = await fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`, token)
+        const latest = await fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`)
         if (latest?.date) {
           const endDateRaw = new Date(latest.date)
           const endDate = endDateRaw > CLAMP_END ? new Date(CLAMP_END) : endDateRaw
@@ -86,19 +81,11 @@ function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site])
 
-  const { loginWithRedirect, logout, isAuthenticated } = useAuth0()
-
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-5 py-6">
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Salmon FCE Demo</h1>
-        <div className="space-x-2">
-          {isAuthenticated ? (
-            <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>logout({ logoutParams: { returnTo: window.location.origin }})}>Logout</button>
-          ) : (
-            <button className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={()=>loginWithRedirect()}>Login</button>
-          )}
-        </div>
+        <div className="space-x-2" />
       </header>
 
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -159,9 +146,7 @@ function Dashboard() {
 
 export default function App(){
   return (
-    <AuthProvider>
-      <Dashboard />
-    </AuthProvider>
+    <Dashboard />
   )
 }
 
