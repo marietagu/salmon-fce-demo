@@ -6,7 +6,12 @@ import { FceChart, TempChart } from './components/Charts'
 import { useAuth0 } from '@auth0/auth0-react'
 
 function Dashboard() {
-  const today = useMemo(()=> new Date(), [])
+  const CLAMP_END_ISO = '2025-09-07'
+  const CLAMP_END = useMemo(()=> new Date(CLAMP_END_ISO), [])
+  const today = useMemo(()=> {
+    const t = new Date()
+    return t > CLAMP_END ? new Date(CLAMP_END) : t
+  }, [CLAMP_END])
   const startDefault = new Date(today); startDefault.setMonth(today.getMonth()-3)
   const [start, setStart] = useState(startDefault.toISOString().slice(0,10))
   const [end, setEnd] = useState(today.toISOString().slice(0,10))
@@ -21,14 +26,15 @@ function Dashboard() {
     }
   })
 
-  // Auto-align: fetch latest and set end/start to [latest - 90d, latest]
+  // Auto-align: fetch latest and set end/start to [min(latest, CLAMP_END) - 90d, min(latest, CLAMP_END)]
   useEffect(() => {
     (async () => {
       try {
         const token = await getToken()
         const latest = await fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`, token)
         if (latest?.date) {
-          const endDate = new Date(latest.date)
+          const endDateRaw = new Date(latest.date)
+          const endDate = endDateRaw > CLAMP_END ? new Date(CLAMP_END) : endDateRaw
           const startDate = new Date(endDate)
           startDate.setDate(startDate.getDate() - 90)
           const newEnd = endDate.toISOString().slice(0,10)
@@ -61,10 +67,10 @@ function Dashboard() {
 
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <label className="flex flex-col text-sm">Start
-          <input className="mt-1 border rounded p-2" type="date" value={start} onChange={e=>setStart(e.target.value)} />
+          <input className="mt-1 border rounded p-2" type="date" value={start} max={CLAMP_END_ISO} onChange={e=>setStart(e.target.value)} />
         </label>
         <label className="flex flex-col text-sm">End
-          <input className="mt-1 border rounded p-2" type="date" value={end} onChange={e=>setEnd(e.target.value)} />
+          <input className="mt-1 border rounded p-2" type="date" value={end} max={CLAMP_END_ISO} onChange={e=>setEnd(e.target.value)} />
         </label>
         <label className="flex flex-col text-sm md:col-span-2">Site
           <input className="mt-1 border rounded p-2" value={site} onChange={e=>setSite(e.target.value)} />
