@@ -73,7 +73,7 @@ function Dashboard() {
         setStart(newStart)
       }
     }
-  }, [latestData, end, start, maxDateISO])
+  }, [latestData, maxDateISO])
 
   // Enforce start <= end and clamp to maxDateISO on manual edits
   const onStartChange = (v) => {
