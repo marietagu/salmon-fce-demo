@@ -21,6 +21,7 @@ export default defineConfig({
         drop_debugger: true
       }
     }
-  }
+  },
+  publicDir: 'public'
 })
 

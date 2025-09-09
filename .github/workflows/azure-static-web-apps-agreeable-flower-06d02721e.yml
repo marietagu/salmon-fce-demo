@@ -42,6 +42,8 @@ jobs:
         run: |
           cd frontend
           npm run build
+          # Ensure staticwebapp.config.json is in the dist folder
+          cp staticwebapp.config.json dist/
       
       - name: Build And Deploy
         id: builddeploy
