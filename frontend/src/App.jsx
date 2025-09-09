@@ -13,43 +13,26 @@ const ChartSkeleton = () => (
 )
 
 function Dashboard() {
-  const CLAMP_END_ISO = '2025-09-07'
-  const CLAMP_END = useMemo(()=> new Date(CLAMP_END_ISO), [])
-  const today = useMemo(()=> {
-    const t = new Date()
-    return t > CLAMP_END ? new Date(CLAMP_END) : t
-  }, [CLAMP_END])
-  const startDefault = new Date(today); startDefault.setMonth(today.getMonth()-3)
+  // Dynamic max date: either today or latest available from API
+  const [maxDateISO, setMaxDateISO] = useState(new Date().toISOString().slice(0,10))
+  const maxDateObj = useMemo(()=> new Date(maxDateISO), [maxDateISO])
+  const startDefault = new Date(maxDateObj); startDefault.setMonth(maxDateObj.getMonth()-3)
   const [start, setStart] = useState(startDefault.toISOString().slice(0,10))
-  const [end, setEnd] = useState(today.toISOString().slice(0,10))
+  const [end, setEnd] = useState(maxDateISO)
   const [site, setSite] = useState('Marlborough Sounds')
   // No auth: all API endpoints are public
 
-  // Helper to thin data for charts when needed
-  const thin = (arr, maxPoints = 300) => {
-    if (!arr || arr.length <= maxPoints) return arr || []
-    const step = Math.ceil(arr.length / maxPoints)
-    const out = []
-    for (let i = 0; i < arr.length; i += step) out.push(arr[i])
-    return out
-  }
+  // No client-side thinning by default
 
-  // Chart data: use aggregated endpoint for large ranges; fallback to daily on 404
+  // Chart data: always fetch daily from /api/metrics (no downsampling)
   const { data: chartData, isLoading: isLoadingChart, error: chartError, refetch: refetchChart } = useQuery({
     queryKey: ['chartData', start, end, site],
     queryFn: async () => {
+      // Calculate exact required number of rows and pass as explicit limit for safety
       const startDate = new Date(start)
       const endDate = new Date(end)
       const spanDays = Math.max(1, Math.round((endDate - startDate) / 86400000) + 1)
-      try {
-        if (spanDays > 60) {
-          // Request ~200 points for smoothness
-          return await fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=200`)
-        }
-      } catch (e) {
-        // If aggregated not available, fall back to daily
-      }
-      return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}`)
+      return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}&limit=${spanDays}`)
     }
   })
 
@@ -75,9 +58,12 @@ function Dashboard() {
   })
 
   useEffect(() => {
+    // Update max date from latest available
     if (latestData?.date) {
-      const endDateRaw = new Date(latestData.date)
-      const endDate = endDateRaw > CLAMP_END ? new Date(CLAMP_END) : endDateRaw
+      const latestISO = latestData.date
+      if (latestISO !== maxDateISO) setMaxDateISO(latestISO)
+      // Initialize range if current end is beyond max or uninitialized
+      const endDate = new Date(latestISO)
       const startDate = new Date(endDate)
       startDate.setDate(startDate.getDate() - 90)
       const newEnd = endDate.toISOString().slice(0,10)
@@ -87,7 +73,25 @@ function Dashboard() {
         setStart(newStart)
       }
     }
-  }, [latestData, end, start, CLAMP_END])
+  }, [latestData, end, start, maxDateISO])
+
+  // Enforce start <= end and clamp to maxDateISO on manual edits
+  const onStartChange = (v) => {
+    if (!v) return
+    let s = new Date(v)
+    if (s > maxDateObj) s = new Date(maxDateObj)
+    const sISO = s.toISOString().slice(0,10)
+    setStart(sISO)
+    if (new Date(end) < s) setEnd(sISO)
+  }
+  const onEndChange = (v) => {
+    if (!v) return
+    let e = new Date(v)
+    if (e > maxDateObj) e = new Date(maxDateObj)
+    const eISO = e.toISOString().slice(0,10)
+    setEnd(eISO)
+    if (new Date(start) > e) setStart(eISO)
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-5 py-6">
@@ -98,10 +102,10 @@ function Dashboard() {
 
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <label className="flex flex-col text-sm">Start
-          <input className="mt-1 border rounded p-2" type="date" value={start} max={CLAMP_END_ISO} onChange={e=>setStart(e.target.value)} />
+          <input className="mt-1 border rounded p-2" type="date" value={start} max={maxDateISO} onChange={e=>onStartChange(e.target.value)} />
         </label>
         <label className="flex flex-col text-sm">End
-          <input className="mt-1 border rounded p-2" type="date" value={end} max={CLAMP_END_ISO} onChange={e=>setEnd(e.target.value)} />
+          <input className="mt-1 border rounded p-2" type="date" value={end} max={maxDateISO} onChange={e=>onEndChange(e.target.value)} />
         </label>
         <label className="flex flex-col text-sm md:col-span-2">Site
           <input className="mt-1 border rounded p-2" value={site} onChange={e=>setSite(e.target.value)} />
@@ -109,10 +113,10 @@ function Dashboard() {
       </section>
 
       <div className="flex gap-2 mb-6">
-        <button className="px-3 py-1.5 rounded bg-gray-2 00 hover:bg-gray-300" onClick={()=>{ refetchChart() }}>Refresh</button>
-        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-30); setStart(s.toISOString().slice(0,10)); }}>Last 30d</button>
-        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-90); setStart(s.toISOString().slice(0,10)); }}>Last 90d</button>
-        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); setStart(s.toISOString().slice(0,10)); }}>Last 180d</button>
+        <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>{ refetchChart() }}>Refresh</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-30); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 30d</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-90); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 90d</button>
+        <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 180d</button>
       </div>
 
       {/* Always show chart containers for better UX */}
@@ -127,7 +131,7 @@ function Dashboard() {
             </div>
           ) : chartData && chartData.length > 0 ? (
             <Suspense fallback={<ChartSkeleton />}>
-              <LazyCharts type="fce" data={thin(chartData)} />
+              <LazyCharts type="fce" data={chartData} />
             </Suspense>
           ) : (
             <div className="h-[300px] flex items-center justify-center text-gray-500">
@@ -146,7 +150,7 @@ function Dashboard() {
             </div>
           ) : chartData && chartData.length > 0 ? (
             <Suspense fallback={<ChartSkeleton />}>
-              <LazyCharts type="temp" data={thin(chartData)} />
+              <LazyCharts type="temp" data={chartData} />
             </Suspense>
           ) : (
             <div className="h-[300px] flex items-center justify-center text-gray-500">
