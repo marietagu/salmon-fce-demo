@@ -1,7 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, Suspense, lazy } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchJSON } from './lib/api'
-import { FceChart, TempChart } from './components/Charts'
+
+// Lazy load charts to reduce initial bundle size
+const LazyCharts = lazy(() => import('./components/Charts'))
+
+// Loading skeleton for charts
+const ChartSkeleton = () => (
+  <div className="animate-pulse">
+    <div className="h-[300px] bg-gray-200 rounded"></div>
+  </div>
+)
 
 function Dashboard() {
   const CLAMP_END_ISO = '2025-09-07'
@@ -59,27 +68,26 @@ function Dashboard() {
   })
 
   // Auto-align: fetch latest and set end/start to [min(latest, CLAMP_END) - 90d, min(latest, CLAMP_END)]
+  const { data: latestData } = useQuery({
+    queryKey: ['latest', site],
+    queryFn: () => fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`),
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  })
+
   useEffect(() => {
-    (async () => {
-      try {
-        const latest = await fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`)
-        if (latest?.date) {
-          const endDateRaw = new Date(latest.date)
-          const endDate = endDateRaw > CLAMP_END ? new Date(CLAMP_END) : endDateRaw
-          const startDate = new Date(endDate)
-          startDate.setDate(startDate.getDate() - 90)
-          const newEnd = endDate.toISOString().slice(0,10)
-          const newStart = startDate.toISOString().slice(0,10)
-          if (newEnd !== end || newStart !== start) {
-            setEnd(newEnd)
-            setStart(newStart)
-          }
-        }
-      } catch {}
-    })()
-  // only on mount or when site changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [site])
+    if (latestData?.date) {
+      const endDateRaw = new Date(latestData.date)
+      const endDate = endDateRaw > CLAMP_END ? new Date(CLAMP_END) : endDateRaw
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 90)
+      const newEnd = endDate.toISOString().slice(0,10)
+      const newStart = startDate.toISOString().slice(0,10)
+      if (newEnd !== end || newStart !== start) {
+        setEnd(newEnd)
+        setStart(newStart)
+      }
+    }
+  }, [latestData, end, start, CLAMP_END])
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-5 py-6">
@@ -107,39 +115,70 @@ function Dashboard() {
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); setStart(s.toISOString().slice(0,10)); }}>Last 180d</button>
       </div>
 
-      {isLoadingChart && <p className="text-sm text-gray-600">Loading…</p>}
-      {chartError && <p className="text-sm text-red-600">Error: {String(chartError)}</p>}
-
-      {chartData && chartData.length>0 && (
-        <>
-          <div className="grid gap-6">
-            <div className="bg-white shadow rounded p-4">
-              <h2 className="font-medium mb-2">Feed Conversion Efficiency (FCE)</h2>
-              <FceChart data={thin(chartData)} />
+      {/* Always show chart containers for better UX */}
+      <div className="grid gap-6">
+        <div className="bg-white shadow rounded p-4">
+          <h2 className="font-medium mb-2">Feed Conversion Efficiency (FCE)</h2>
+          {isLoadingChart ? (
+            <ChartSkeleton />
+          ) : chartError ? (
+            <div className="h-[300px] flex items-center justify-center text-red-600">
+              Error loading chart: {String(chartError)}
             </div>
-            <div className="bg-white shadow rounded p-4">
-              <h2 className="font-medium mb-2">Average Temperature (°C)</h2>
-              <TempChart data={thin(chartData)} />
+          ) : chartData && chartData.length > 0 ? (
+            <Suspense fallback={<ChartSkeleton />}>
+              <LazyCharts type="fce" data={thin(chartData)} />
+            </Suspense>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-gray-500">
+              No data available
             </div>
-          </div>
+          )}
+        </div>
+        
+        <div className="bg-white shadow rounded p-4">
+          <h2 className="font-medium mb-2">Average Temperature (°C)</h2>
+          {isLoadingChart ? (
+            <ChartSkeleton />
+          ) : chartError ? (
+            <div className="h-[300px] flex items-center justify-center text-red-600">
+              Error loading chart: {String(chartError)}
+            </div>
+          ) : chartData && chartData.length > 0 ? (
+            <Suspense fallback={<ChartSkeleton />}>
+              <LazyCharts type="temp" data={thin(chartData)} />
+            </Suspense>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-gray-500">
+              No data available
+            </div>
+          )}
+        </div>
+      </div>
 
-          <div className="bg-white shadow rounded p-4 mt-6 overflow-x-auto">
-            <h3 className="font-medium mb-2">Last 14 days</h3>
-            <table className="min-w-full text-sm">
-              <thead className="text-left text-gray-500">
-                <tr><th className="py-2">Date</th><th>FCE</th><th>FCR</th><th>Feed (kg)</th><th>Gain (kg)</th></tr>
-              </thead>
-              <tbody>
-                {(tableData || []).slice(-14).map((r)=> (
-                  <tr key={r.date} className="border-t">
-                    <td className="py-1.5">{r.date}</td><td>{r.fce}</td><td>{r.fcr}</td><td>{r.feed_given_kg}</td><td>{r.biomass_gain_kg}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="bg-white shadow rounded p-4 mt-6 overflow-x-auto">
+        <h3 className="font-medium mb-2">Last 14 days</h3>
+        {!tableData ? (
+          <div className="animate-pulse space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-4 bg-gray-200 rounded"></div>
+            ))}
           </div>
-        </>
-      )}
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-gray-500">
+              <tr><th className="py-2">Date</th><th>FCE</th><th>FCR</th><th>Feed (kg)</th><th>Gain (kg)</th></tr>
+            </thead>
+            <tbody>
+              {tableData.slice(-14).map((r)=> (
+                <tr key={r.date} className="border-t">
+                  <td className="py-1.5">{r.date}</td><td>{r.fce}</td><td>{r.fcr}</td><td>{r.feed_given_kg}</td><td>{r.biomass_gain_kg}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }
