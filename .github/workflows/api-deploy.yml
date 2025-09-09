@@ -15,6 +15,9 @@ env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_RESOURCE_GROUP: fce-demo-rg
   AZURE_CONTAINERAPP_NAME: fce-api
+  # Pass CORS settings to container app
+  ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+  ALLOWED_ORIGIN_REGEX: ${{ secrets.ALLOWED_ORIGIN_REGEX }}
 
 jobs:
   build-and-deploy:
@@ -47,6 +50,8 @@ jobs:
         run: |
           az extension add --name containerapp --upgrade
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-          az containerapp update -n "$AZURE_CONTAINERAPP_NAME" -g "$AZURE_RESOURCE_GROUP" --image ${ACR_LOGIN_SERVER}/fce-backend:${{ github.sha }}
+          az containerapp update -n "$AZURE_CONTAINERAPP_NAME" -g "$AZURE_RESOURCE_GROUP" \
+            --image ${ACR_LOGIN_SERVER}/fce-backend:${{ github.sha }} \
+            --set-env-vars "ALLOWED_ORIGINS=$ALLOWED_ORIGINS" "ALLOWED_ORIGIN_REGEX=$ALLOWED_ORIGIN_REGEX"
 
 
