@@ -13,8 +13,9 @@ const ChartSkeleton = () => (
 )
 
 function Dashboard() {
-  // Dynamic max date: either today or latest available from API
-  const [maxDateISO, setMaxDateISO] = useState(new Date().toISOString().slice(0,10))
+  // Dynamic max date: min(today, latest available from API)
+  const todayISO = useMemo(() => new Date().toISOString().slice(0,10), [])
+  const [maxDateISO, setMaxDateISO] = useState(todayISO)
   const maxDateObj = useMemo(()=> new Date(maxDateISO), [maxDateISO])
   const startDefault = new Date(maxDateObj); startDefault.setMonth(maxDateObj.getMonth()-3)
   const [start, setStart] = useState(startDefault.toISOString().slice(0,10))
@@ -58,12 +59,13 @@ function Dashboard() {
   })
 
   useEffect(() => {
-    // Update max date from latest available
+    // Update max date from latest available, clamped to today to avoid future-looking defaults
     if (latestData?.date) {
       const latestISO = latestData.date
-      if (latestISO !== maxDateISO) setMaxDateISO(latestISO)
-      // Initialize range if current end is beyond max or uninitialized
-      const endDate = new Date(latestISO)
+      const maxISO = latestISO < todayISO ? latestISO : todayISO
+      if (maxISO !== maxDateISO) setMaxDateISO(maxISO)
+      // Initialize range relative to maxISO
+      const endDate = new Date(maxISO)
       const startDate = new Date(endDate)
       startDate.setDate(startDate.getDate() - 90)
       const newEnd = endDate.toISOString().slice(0,10)
