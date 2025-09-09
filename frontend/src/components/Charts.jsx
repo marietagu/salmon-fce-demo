@@ -1,7 +1,7 @@
 import React from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Brush } from 'recharts'
 
-export function FceChart({ data }) {
+function FceChart({ data }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data} margin={{ top: 10, right: 80, bottom: 40, left: 24 }}>
@@ -17,7 +17,7 @@ export function FceChart({ data }) {
   )
 }
 
-export function TempChart({ data }) {
+function TempChart({ data }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data} margin={{ top: 10, right: 80, bottom: 40, left: 24 }}>
@@ -32,4 +32,15 @@ export function TempChart({ data }) {
     </ResponsiveContainer>
   )
 }
+
+// Main component for lazy loading
+export default function Charts({ type, data }) {
+  if (type === 'fce') {
+    return <FceChart data={data} />
+  }
+  return <TempChart data={data} />
+}
+
+// Also export individual components for backward compatibility
+export { FceChart, TempChart }
 
