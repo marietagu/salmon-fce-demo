@@ -30,6 +30,10 @@ web:
 seed:
 	cd etl && (uv run --with httpx --with motor python seed.py || (python -m pip install -U pip && python -m pip install httpx motor && python seed.py))
 
+# One-shot top-up to fill missing days up to today
+seed-topup:
+	cd etl && (uv run --with httpx --with motor python top_up.py || (python -m pip install -U pip && python -m pip install httpx motor && python top_up.py))
+
 # Run full stack in Docker (Mongo + API + Frontend)
 compose-up:
 	docker compose up --build

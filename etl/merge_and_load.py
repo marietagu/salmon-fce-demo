@@ -13,14 +13,22 @@ async def merge_and_upsert(records: Iterable[Dict], temps_by_date: Dict[str, flo
 
     docs = []
     for rec in records:
-        rec["avg_temperature_C"] = temps_by_date.get(rec["date"])  # may be None; acceptable for demo
+        # Prefer not to downgrade an existing non-null temperature to null.
+        # We will use a conditional update in the upsert stage below to preserve existing values.
+        rec["avg_temperature_C"] = temps_by_date.get(rec["date"])  # may be None for some days
         docs.append(rec)
 
     # bulk upsert by (date, site) with throttling/backoff for Cosmos RU limits
     ops = []
     for d in docs:
         filt = {"date": d["date"], "site": d["site"]}
-        ops.append(UpdateOne(filt, {"$set": d}, upsert=True))
+        # Build update that only sets avg_temperature_C if incoming is not None,
+        # otherwise preserve existing value (avoid null overwrite).
+        set_fields = {k: v for k, v in d.items() if k != "avg_temperature_C"}
+        update_doc: dict = {"$set": set_fields}
+        if d.get("avg_temperature_C") is not None:
+            update_doc["$set"]["avg_temperature_C"] = d["avg_temperature_C"]
+        ops.append(UpdateOne(filt, update_doc, upsert=True))
 
     async def write_with_backoff(batched_ops: list[UpdateOne], *, max_retries: int = 6) -> None:
         attempt = 0
