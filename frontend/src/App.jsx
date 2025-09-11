@@ -25,16 +25,19 @@ function Dashboard() {
 
   // No client-side thinning by default
 
-  // Chart data: always fetch daily from /api/metrics (no downsampling)
+  // Chart data: use aggregated endpoint to bound payload size
   const { data: chartData, isLoading: isLoadingChart, error: chartError, refetch: refetchChart } = useQuery({
-    queryKey: ['chartData', start, end, site],
-    queryFn: async () => {
-      // Calculate exact required number of rows and pass as explicit limit for safety
+    queryKey: ['chartDataAgg', start, end, site],
+    queryFn: async ({ signal }) => {
       const startDate = new Date(start)
       const endDate = new Date(end)
       const spanDays = Math.max(1, Math.round((endDate - startDate) / 86400000) + 1)
-      return fetchJSON(`/api/metrics?start=${start}&end=${end}&site=${encodeURIComponent(site)}&limit=${spanDays}`)
-    }
+      const points = Math.max(60, Math.min(360, Math.ceil(spanDays * 1.2)))
+      return fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=${points}`, { signal })
+    },
+    staleTime: 5 * 60 * 1000,
+    keepPreviousData: true,
+    refetchOnWindowFocus: false
   })
 
   // Table data: always last 14 days based on current end date
