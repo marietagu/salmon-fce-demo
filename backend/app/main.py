@@ -5,12 +5,15 @@ from typing import Optional, List
 from math import ceil
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+from fastapi.responses import ORJSONResponse
 from .config import settings
 from .db import get_collection
+from .db import ensure_indexes
 from .models import DailyRecord, SummaryResponse, AggregatedPoint
 # Auth removed: all endpoints are public
 
-app = FastAPI(title="FCE Demo API", version="0.1.0")
+app = FastAPI(title="FCE Demo API", version="0.1.0", default_response_class=ORJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +23,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# Enable gzip compression for larger responses
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+@app.on_event("startup")
+async def _startup():
+    try:
+        await ensure_indexes()
+    except Exception:
+        # Avoid failing startup if we cannot create indexes due to permissions
+        pass
 
 @app.get("/healthz")
 async def healthz():

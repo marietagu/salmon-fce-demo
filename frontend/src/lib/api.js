@@ -9,9 +9,9 @@ if (!runtimeBase && !envBase) {
   console.warn('[api] Using fallback API_BASE:', API_BASE)
 }
 
-export async function fetchJSON(path) {
+export async function fetchJSON(path, { signal } = {}) {
   const urlPath = path.startsWith('/') ? path : `/${path}`
-  const res = await fetch(`${API_BASE}${urlPath}`)
+  const res = await fetch(`${API_BASE}${urlPath}`, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
