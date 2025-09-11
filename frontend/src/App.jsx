@@ -13,7 +13,7 @@ const ChartSkeleton = () => (
 )
 
 function Dashboard() {
-  // Dynamic max date: min(today, latest available from API)
+  // Max date comes from API latest (not local today) so calendar allows only available data
   const todayISO = useMemo(() => new Date().toISOString().slice(0,10), [])
   const [maxDateISO, setMaxDateISO] = useState(todayISO)
   const maxDateObj = useMemo(()=> new Date(maxDateISO), [maxDateISO])
@@ -35,13 +35,14 @@ function Dashboard() {
       const points = Math.max(60, Math.min(360, Math.ceil(spanDays * 1.2)))
       return fetchJSON(`/api/metrics/aggregated?start=${start}&end=${end}&site=${encodeURIComponent(site)}&points=${points}`, { signal })
     },
-    staleTime: 5 * 60 * 1000,
+    // Keep cache short so range updates reflect quickly when data changes
+    staleTime: 30 * 1000,
     keepPreviousData: true,
     refetchOnWindowFocus: false
   })
 
   // Table data: always last 14 days based on current end date
-  const { data: tableData } = useQuery({
+  const { data: tableData, refetch: refetchTable } = useQuery({
     queryKey: ['tableData', end, site],
     queryFn: async () => {
       const endDate = new Date(end)
@@ -55,30 +56,27 @@ function Dashboard() {
   })
 
   // Auto-align: fetch latest and set end/start to [min(latest, CLAMP_END) - 90d, min(latest, CLAMP_END)]
-  const { data: latestData } = useQuery({
+  const { data: latestData, refetch: refetchLatest } = useQuery({
     queryKey: ['latest', site],
     queryFn: () => fetchJSON(`/api/metrics/latest?site=${encodeURIComponent(site)}`),
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 5 * 1000,
   })
 
+  // Initialize range once from latest
+  const [initialized, setInitialized] = useState(false)
   useEffect(() => {
-    // Update max date from latest available, clamped to today to avoid future-looking defaults
-    if (latestData?.date) {
-      const latestISO = latestData.date
-      const maxISO = latestISO < todayISO ? latestISO : todayISO
-      if (maxISO !== maxDateISO) setMaxDateISO(maxISO)
-      // Initialize range relative to maxISO
-      const endDate = new Date(maxISO)
-      const startDate = new Date(endDate)
-      startDate.setDate(startDate.getDate() - 90)
-      const newEnd = endDate.toISOString().slice(0,10)
-      const newStart = startDate.toISOString().slice(0,10)
-      if (newEnd !== end || newStart !== start) {
-        setEnd(newEnd)
-        setStart(newStart)
-      }
-    }
-  }, [latestData, maxDateISO])
+    if (!latestData?.date) return
+    // Always keep maxDateISO in sync with latest (without resetting current start/end)
+    const latestISO = latestData.date
+    if (latestISO !== maxDateISO) setMaxDateISO(latestISO)
+    if (initialized) return
+    const endDate = new Date(latestISO)
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - 90)
+    setEnd(endDate.toISOString().slice(0,10))
+    setStart(startDate.toISOString().slice(0,10))
+    setInitialized(true)
+  }, [latestData, initialized, maxDateISO, todayISO])
 
   // Enforce start <= end and clamp to maxDateISO on manual edits
   const onStartChange = (v) => {
@@ -118,7 +116,7 @@ function Dashboard() {
       </section>
 
       <div className="flex gap-2 mb-6">
-        <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>{ refetchChart() }}>Refresh</button>
+        <button className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300" onClick={()=>{ refetchLatest(); refetchChart(); refetchTable(); }}>Refresh</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-30); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 30d</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-90); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 90d</button>
         <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={()=>{ const d=new Date(end); const s=new Date(d); s.setDate(s.getDate()-180); const sISO=s.toISOString().slice(0,10); if (s<=maxDateObj) setStart(sISO); else setStart(maxDateISO); }}>Last 180d</button>
